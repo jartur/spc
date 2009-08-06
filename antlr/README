@@ -1,1 +1,0 @@
-I store ANTLR runtime in this folder and it is referenced in the project settings. You may either reference it anywhere you want, or just put ANTLR C# runtime libraries here. I think. I really don't know how to deploy such things correctly. Especially in a source form =)
