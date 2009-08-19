@@ -1,15 +1,11 @@
 grammar spc;
 /*
 * Pascal grammar. Adopted directly from Pascal ISO/IEC 7185:1990 standard.
-* This is a practical AST-bulding version.
+* I try to make the grammar as close to the stanard as possible hence it may seem
+* somewhat redundant.
+* Numbers in comments are references to the corresponding standard sections.
 * 2009, Ilya 'jartur' Pavlenkov
 */
-
-options
-{
-	language=Python;
-	output=AST;
-}
 
 // 6.2.1 Blocks
 block	:	label_declarations
@@ -39,16 +35,16 @@ statements
 	
 // 6.3 Constant-definitions
 const_definition
-	:	ID '=' constant {constants[$ID.text]=$constant.text} ;
+	:	ID '=' constant;
 	
 constant:	(SIGN)? (unsigned_number | const_id)
 	|	STRING;
 	
-const_id:	ID {$ID.text in constants}?;
+const_id:	ID;
 
 // 6.4.1 General type-definitions
 type_definition
-	:	ID '=' type_denoter {types[$ID.text]=$type_denoter.text};
+	:	ID '=' type_denoter;
 
 type_denoter
 	:	type_id | new_type;
