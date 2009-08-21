@@ -1,7 +1,9 @@
 grammar spc;
 /*
 * Pascal grammar. Adopted directly from Pascal ISO/IEC 7185:1990 standard.
-* This is a practical AST-bulding version.
+* This is a practical AST-bulding version. This part of grammar is concerned
+* only with Syntax not Semantics. For Semantical parts look at base_grammar.g
+* and ast.g
 * 2009, Ilya 'jartur' Pavlenkov
 */
 
@@ -17,7 +19,7 @@ block	:	label_declarations
 		type_definitions
 		var_declarations
 		proc_func_declarations
-		statements;
+		compound_statement;
 
 label_declarations
 	:	(LABEL LABELT (',' LABELT)* ';')?;
@@ -34,53 +36,30 @@ var_declarations
 proc_func_declarations
 	:	((proc_declaration | func_declaration) ';')*;
 	
-statements
-	:	compound_statement;
-	
 // 6.3 Constant-definitions
 const_definition
-	:	ID '=' constant {constants[$ID.text]=$constant.text} ;
+	:	ID '=' constant;
 	
-constant:	(SIGN)? (unsigned_number | const_id)
+constant:	(SIGN)? (unsigned_number | ID)
 	|	STRING;
-	
-const_id:	ID {$ID.text in constants}?;
 
 // 6.4.1 General type-definitions
 type_definition
-	:	ID '=' type_denoter {types[$ID.text]=$type_denoter.text};
+	:	ID '=' type_denoter;
 
 type_denoter
-	:	type_id | new_type;
+	:	ID | new_type;
 
 new_type:	new_ord_type | new_struct_type | new_pointer_type;
 
 // 6.4.2.1 General simple-types
-simple_type_id
-	:	type_id;
-	
-struct_type_id
-	:	type_id;
-
-pointer_type_id
-	:	type_id;
-	
-type_id	:	ID {$ID.text in types}?;
-
-simple_type
-	:	ord_type | real_type_id;
 
 ord_type
-	:	new_ord_type | ord_type_id;
+	:	new_ord_type | ID;
 	
 new_ord_type
 	:	enum_type | subrange_type;
 	
-ord_type_id
-	:	type_id;
-	
-real_type_id
-	:	type_id;
 	
 // 6.4.2.3 Enumerated-types
 enum_type
@@ -94,7 +73,7 @@ subrange_type
 	
 // 6.4.3.1 General structured-types
 struct_type
-	:	new_struct_type | struct_type_id;
+	:	new_struct_type | ID;
 	
 new_struct_type
 	:	(PACKED)? unpacked_struct_type;
@@ -104,13 +83,7 @@ unpacked_struct_type
 	
 // 6.4.3.2 Array-types
 array_type
-	:	ARRAY '[' index_type (',' index_type)* ']' OF component_type;
-	
-index_type
-	:	ord_type;
-	
-component_type
-	:	type_denoter;
+	:	ARRAY '[' ord_type (',' ord_type)* ']' OF type_denoter;
 	
 // 6.4.3.3 Record-types
 record_type
@@ -124,65 +97,40 @@ fixed_part
 
 record_section
 	:	id_list ':' type_denoter;
-	
-field_id:	ID;
 
 variant_part
 	:	CASE variant_selector OF variant (';' variant)*;
 	
 variant_selector
-	:	(tag_field ':')? tag_type;
-	
-tag_field
-	:	ID;
+	:	(ID ':')? ID;
 	
 variant	:	case_const_list ':' '(' field_list ')';
 
-tag_type:	ord_type_id;
-
 case_const_list
-	:	case_const (',' case_const)*;
-	
-case_const
-	:	constant;
+	:	constant (',' constant)*;
 	
 // 6.4.3.4 Set-types
-set_type:	SET OF base_type;
-
-base_type
-	:	ord_type;
+set_type:	SET OF ord_type;
 	
 // 6.4.3.5 File-types
 file_type
-	:	FILE OF component_type;
+	:	FILE OF type_denoter;
 	
 // 6.4.4 Pointer-types
 pointer_type
-	:	new_pointer_type | pointer_type_id;
+	:	new_pointer_type | ID;
 	
 new_pointer_type
-	:	'^' domain_type;
-	
-domain_type
-	:	type_id; 
+	:	'^' ID;
 	
 // 6.5.1 Variable-declarations
 var_declaration
 	:	id_list ':' type_denoter;
 
 var_access
-	:	entire_var | component_var | id_var | buffer_var;
+	:	ID | component_var | id_var | buffer_var;
 	
-id_var	:	pointer_var '^';
-
-pointer_var
-	:	var_access;
-
-// 6.5.2 Entire-variables
-entire_var
-	:	var_id;
-	
-var_id	:	ID;
+id_var	:	var_access '^';
 
 // 6.5.3.1 General component-variables
 component_var
@@ -190,72 +138,34 @@ component_var
 	
 // 6.5.3.2 Indexed-variables
 indexed_var
-	:	array_var '[' index_expr (',' index_expr)* ']';
-
-array_var
-	:	var_access;
-	
-index_expr
-	:	expr;
+	:	var_access '[' expr (',' expr)* ']';
 
 // 6.5.3.3 Field-designators
 field_designator
-	:	record_var '.' field_specifier
-	|	field_designator_id;
-	
-record_var
-	:	var_access;
-	
-field_specifier
-	:	field_id;
+	:	var_access '.' ID
+	|	ID;
 	
 // 6.5.5 Buffer-variables
 buffer_var
-	:	file_var '^';
-	
-file_var:	var_access;
-
-// 6.1.4 Directives
-directive 
-	:	ID;
+	:	var_access '^';
 
 // 6.6.1 Procedure-declarations
 proc_declaration
-	:	proc_heading ';' directive
-	|	proc_identification ';' proc_block
-	|	proc_heading ';' proc_block;
+	:	proc_heading ';' (ID | block);
 	
 proc_heading
 	:	PROCEDURE ID (formal_parameter_list)*;
-	
-proc_identification
-	:	PROCEDURE proc_id;
-	
-proc_id
-	:	ID;
-	
-proc_block
-	:	block;
 
 // 6.6.2 Function-declarations
 func_declaration
-	:	func_heading ';' directive
-	|	func_identification ';' func_block
-	|	func_heading ';' func_block;
+	:	func_heading ';' (ID | block)
+	|	func_identification ';' block;
 
 func_heading
-	:	FUNCTION ID (formal_parameter_list)* ':' result_type;
+	:	FUNCTION ID (formal_parameter_list)* ':' ID;
 	
 func_identification
-	:	FUNCTION func_id;
-	
-func_id	:	ID;
-
-result_type
-	:	simple_type_id | pointer_type_id;
-	
-func_block
-	:	block;
+	:	FUNCTION ID;
 	
 // 6.6.3.1 General parameters
 formal_parameter_list
@@ -264,21 +174,15 @@ formal_parameter_list
 formal_parameter_section
 	:	value_parameter_spec
 	|	var_parameter_spec
-	|	proc_parameter_spec
-	|	func_parameter_spec
+	|	proc_heading
+	|	func_heading
 	|	conformant_array_parameter_spec;
 	
 value_parameter_spec
-	:	id_list ':' type_id;
+	:	id_list ':' ID;
 	
 var_parameter_spec
-	:	VAR id_list ':' type_id;
-	
-proc_parameter_spec
-	:	proc_heading;
-	
-func_parameter_spec
-	:	func_heading;
+	:	VAR id_list ':' ID;
 
 // 6.6.3.7.1 General conformant array parameters
 conformant_array_parameter_spec
@@ -296,15 +200,15 @@ conf_array_schema
 	|	unpacked_conf_array_schema;
 	
 packed_conf_array_schema
-	:	PACKED ARRAY '[' index_type_spec ']' OF type_id;
+	:	PACKED ARRAY '[' index_type_spec ']' OF ID;
 	
 unpacked_conf_array_schema
-	:	ARRAY '[' index_type_spec (';' index_type_spec)* ']' OF (type_id | conf_array_schema);
+	:	ARRAY '[' index_type_spec (';' index_type_spec)* ']' OF (ID | conf_array_schema);
 	
 index_type_spec
-	:	ID '..' ID ':' ord_type_id;
+	:	ID '..' ID ':' ID;
 	
-factor	:	bound_id
+factor	:	ID
 	|	var_access
 	|	unsigned_const
 	|	func_designator
@@ -323,7 +227,7 @@ term	:	factor (multop factor)*;
 unsigned_const
 	:	unsigned_number
 	|	STRING
-	|	const_id
+	|	ID
 	|	NIL;
 	
 set_constructor
@@ -339,13 +243,9 @@ addop	:	'+' | '-' | OR;
 
 relop	:	'=' | '<>' | '<' | '>' | '<=' | '>=' | IN;
 
-// 6.7.2.3 Boolean operators
-bool_expr 
-	:	expr;
-	
 // 6.7.3 Function-designators
 func_designator
-	:	func_id (actual_param_list)?;
+	:	ID (actual_param_list)?;
 	
 actual_param_list
 	:	'(' actual_param (',' actual_param)* ')';
@@ -353,8 +253,7 @@ actual_param_list
 actual_param
 	:	expr
 	|	var_access
-	|	proc_id
-	|	func_id;
+	|	ID;
 	
 // 6.8.2.1 General simple-statements
 simple_statement
@@ -368,11 +267,11 @@ empty_statement
 	
 // 6.8.2.2 Assignment-statements
 assign_statement
-	:	(var_access | func_id) ':=' expr;
+	:	(var_access | ID) ':=' expr;
 	
 // 6.8.2.3 Procedure-statements
 proc_statement
-	:	proc_id ( (actual_param_list)? 
+	:	ID ( (actual_param_list)? 
 			| read_param_list
 			| readln_param_list
 			| write_param_list
@@ -403,20 +302,17 @@ cond_statement
 	
 // 6.8.3.4 If-statements
 if_statement
-	:	IF bool_expr THEN statement (else_part)?;
+	:	IF expr THEN statement (else_part)?;
 
 else_part
 	:	ELSE statement;
 	
 // 6.8.3.5 Case-statements
 case_statement
-	:	CASE case_index OF case_list_element (';' case_list_element)* (';')? END;
+	:	CASE expr OF case_list_element (';' case_list_element)* (';')? END;
 
 case_list_element
 	:	case_const_list ':' statement;
-	
-case_index
-	:	expr;
 	
 // 6.8.3.6 Repetitive-statements
 repetitive_statement
@@ -426,69 +322,49 @@ repetitive_statement
 	
 // 6.8.3.7
 repeat_statement
-	:	REPEAT statement_sequence UNTIL bool_expr;
+	:	REPEAT statement_sequence UNTIL expr;
 
 // 6.8.3.8 While-statements
 while_statement
-	:	WHILE bool_expr DO statement;
+	:	WHILE expr DO statement;
 	
 // 6.8.3.9 For-statements
 for_statement
-	:	FOR control_var ':=' init_value ( TO | DOWNTO ) final_value DO statement;
-	
-control_var
-	:	entire_var;
-	
-init_value
-	:	expr;
-
-final_value
-	:	expr;
+	:	FOR ID ':=' expr ( TO | DOWNTO ) expr DO statement;
 	
 // 6.8.3.10 With-statements
 with_statement
 	:	WITH record_var_list DO statement;
 	
 record_var_list
-	:	record_var (',' record_var)*;
-	
-field_designator_id
-	:	ID;
+	:	var_access (',' var_access)*;
 	
 // 6.9.1 The procedure read
 read_param_list
-	:	'(' (file_var ',')? var_access (',' var_access)* ')';
+	:	'(' (var_access ',')? var_access (',' var_access)* ')';
 
 // 6.9.2 The procedure readln
 readln_param_list
-	:	( '(' ( file_var | var_access ) (',' var_access)* )?;
+	:	( '(' ( var_access | var_access ) (',' var_access)* )?;
 	
 // 6.9.3 The procedure write
 write_param_list
-	:	'(' (file_var ',')? write_param (',' write_param)* ')';
+	:	'(' (var_access ',')? write_param (',' write_param)* ')';
 	
 write_param
 	:	expr (':' expr (':' expr)?)?;
 	
 // 6.9.4 The procedure writeln
 writeln_param_list
-	:	( '(' (file_var | write_param) (',' write_param)* ')' )?;
+	:	( '(' (var_access | write_param) (',' write_param)* ')' )?;
 	
 // 6.10 Programs
-program	:	program_heading ';' program_block '.';
+program	:	program_heading ';' block '.';
 
 program_heading
-	:	PROGRAM ID ('(' program_param_list ')')?;	
-	
-program_param_list
-	:	id_list;
-	
-program_block
-	:	block;
+	:	PROGRAM ID ('(' id_list ')')?;	
 
-// TODO: Strings, comments; empty statement?!
-
-bound_id:	ID;
+// TODO: Strings, comments;
 
 statement
 	:	( LABELT ':' )? ( simple_statement | struct_statement );
