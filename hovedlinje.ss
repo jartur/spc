@@ -1,11 +1,13 @@
 #lang scheme
-(module lexer scheme
+
   (require parser-tools/lex
-           (prefix-in : parser-tools/lex-sre))
+           (prefix-in : parser-tools/lex-sre)
+           parser-tools/yacc)
   
   (define-tokens data (INT FLOAT STRING ID))
-  (define-tokens delim (LP RP LB RB ASSIGN EQ GT LT GEQ LEQ CARET DOT DDOT AST PLUS MINUS SLASH COMMA COLON SEMICOLON NOTEQ))
+  (define-tokens delim (LP RP LB RB ASSIGN EQ GT LT GEQ LEQ CARET DOT DDOT AST PLUS MINUS SLASH COMMA COLON SC NOTEQ))
   (define-tokens keywords (AND ARRAY BEGIN CASE CONST DIV DO DOWNTO ELSE END FILE FOR FUNCTION GOTO IF IN LABEL MOD NIL NOT OF OR PACKED PROCEDURE PROGRAM RECORD REPEAT SET THEN TO TYPE UNTIL VAR WHILE WITH))
+  (define-empty-tokens eoftk (EOF))
   
   (define-struct tk (lexeme val))
   
@@ -13,6 +15,9 @@
     (lexer-src-pos
      ;; Comments
      ((:or whitesp comment) (return-without-pos (spc-lexer input-port)))
+     
+     ;; EOF
+     ((eof) 'EOF)
      
      ;; Symbols
      ((:: #\: #\=) (make-kw-tk token-ASSIGN lexeme))
@@ -22,7 +27,7 @@
      ((:: #\< #\>) (make-kw-tk token-NOTEQ lexeme))
      (#\> (make-kw-tk token-GT lexeme))
      (#\= (make-kw-tk token-EQ lexeme))
-     (#\; (make-kw-tk token-SEMICOLON lexeme))
+     (#\; (make-kw-tk token-SC lexeme))
      (#\: (make-kw-tk token-COLON lexeme))
      (#\, (make-kw-tk token-COMMA lexeme))
      (#\/ (make-kw-tk token-SLASH lexeme))
@@ -139,7 +144,7 @@
   
   (define (gen-tokens lst)
     (define (spl str)
-      (map (lambda (x) (string->symbol (string (char-downcase x)))) (string->list str)))
+      (map (λ (x) (string->symbol (string (char-downcase x)))) (string->list str)))
     (let loop ([l lst])
       (if (null? l)
           null
@@ -152,603 +157,259 @@
           null
           (cons (list (string->symbol (string c)) (list ':or c (char-upcase c))) (loop (integer->char (+ 1 (char->integer c))))))))
   
-  ;// 6.2.1 Blocks
-  ;block	:	label_declarations
-  ;		const_definitions
-  ;		type_definitions
-  ;		var_declarations
-  ;		proc_func_declarations
-  ;		statements;
-  ;
-  ;label_declarations
-  ;	:	(LABEL LABELT (',' LABELT)* ';')?;
-  ;
-  ;const_definitions
-  ;	:	(CONST (const_definition ';')+)?;
-  ;
-  ;type_definitions
-  ;	:	(TYPE (type_definition ';')+)?;
-  ;
-  ;var_declarations
-  ;	:	(VAR (var_declaration ';')+)?;
-  ;	
-  ;proc_func_declarations
-  ;	:	((proc_declaration | func_declaration) ';')*;
-  ;	
-  ;statements
-  ;	:	compound_statement;
-  ;	
-  ;// 6.3 Constant-definitions
-  ;const_definition
-  ;	:	ID '=' constant;
-  ;	
-  ;constant:	(SIGN)? (unsigned_number | const_id)
-  ;	|	STRING;
-  ;	
-  ;const_id:	ID;
-  ;
-  ;// 6.4.1 General type-definitions
-  ;type_definition
-  ;	:	ID '=' type_denoter;
-  ;
-  ;type_denoter
-  ;	:	type_id | new_type;
-  ;
-  ;new_type:	new_ord_type | new_struct_type | new_pointer_type;
-  ;
-  ;// 6.4.2.1 General simple-types
-  ;simple_type_id
-  ;	:	type_id;
-  ;	
-  ;struct_type_id
-  ;	:	type_id;
-  ;
-  ;pointer_type_id
-  ;	:	type_id;
-  ;	
-  ;type_id	:	ID {$ID.text in types}?;
-  ;
-  ;simple_type
-  ;	:	ord_type | real_type_id;
-  ;
-  ;ord_type
-  ;	:	new_ord_type | ord_type_id;
-  ;	
-  ;new_ord_type
-  ;	:	enum_type | subrange_type;
-  ;	
-  ;ord_type_id
-  ;	:	type_id;
-  ;	
-  ;real_type_id
-  ;	:	type_id;
-  ;	
-  ;// 6.4.2.3 Enumerated-types
-  ;enum_type
-  ;	:	'(' id_list ')';
-  ;	
-  ;id_list	:	ID (',' ID)*;
-  ;
-  ;// 6.4.2.4 Subrange-types
-  ;subrange_type
-  ;	:	constant '..' constant;
-  ;	
-  ;// 6.4.3.1 General structured-types
-  ;struct_type
-  ;	:	new_struct_type | struct_type_id;
-  ;	
-  ;new_struct_type
-  ;	:	(PACKED)? unpacked_struct_type;
-  ;
-  ;unpacked_struct_type
-  ;	:	array_type | record_type | set_type | file_type;
-  ;	
-  ;// 6.4.3.2 Array-types
-  ;array_type
-  ;	:	ARRAY '[' index_type (',' index_type)* ']' OF component_type;
-  ;	
-  ;index_type
-  ;	:	ord_type;
-  ;	
-  ;component_type
-  ;	:	type_denoter;
-  ;	
-  ;// 6.4.3.3 Record-types
-  ;record_type
-  ;	:	RECORD field_list END;
-  ;	
-  ;field_list
-  ;	:	( ( (fixed_part (';' variant_part)?) | variant_part) (';')?)?; 
-  ;	
-  ;fixed_part
-  ;	:	record_section (';' record_section)*;
-  ;
-  ;record_section
-  ;	:	id_list ':' type_denoter;
-  ;	
-  ;field_id:	ID;
-  ;
-  ;variant_part
-  ;	:	CASE variant_selector OF variant (';' variant)*;
-  ;	
-  ;variant_selector
-  ;	:	(tag_field ':')? tag_type;
-  ;	
-  ;tag_field
-  ;	:	ID;
-  ;	
-  ;variant	:	case_const_list ':' '(' field_list ')';
-  ;
-  ;tag_type:	ord_type_id;
-  ;
-  ;case_const_list
-  ;	:	case_const (',' case_const)*;
-  ;	
-  ;case_const
-  ;	:	constant;
-  ;	
-  ;// 6.4.3.4 Set-types
-  ;set_type:	SET OF base_type;
-  ;
-  ;base_type
-  ;	:	ord_type;
-  ;	
-  ;// 6.4.3.5 File-types
-  ;file_type
-  ;	:	FILE OF component_type;
-  ;	
-  ;// 6.4.4 Pointer-types
-  ;pointer_type
-  ;	:	new_pointer_type | pointer_type_id;
-  ;	
-  ;new_pointer_type
-  ;	:	'^' domain_type;
-  ;	
-  ;domain_type
-  ;	:	type_id; 
-  ;	
-  ;// 6.5.1 Variable-declarations
-  ;var_declaration
-  ;	:	id_list ':' type_denoter;
-  ;
-  ;var_access
-  ;	:	entire_var | component_var | id_var | buffer_var;
-  ;	
-  ;id_var	:	pointer_var '^';
-  ;
-  ;pointer_var
-  ;	:	var_access;
-  ;
-  ;// 6.5.2 Entire-variables
-  ;entire_var
-  ;	:	var_id;
-  ;	
-  ;var_id	:	ID;
-  ;
-  ;// 6.5.3.1 General component-variables
-  ;component_var
-  ;	:	indexed_var | field_designator;
-  ;	
-  ;// 6.5.3.2 Indexed-variables
-  ;indexed_var
-  ;	:	array_var '[' index_expr (',' index_expr)* ']';
-  ;
-  ;array_var
-  ;	:	var_access;
-  ;	
-  ;index_expr
-  ;	:	expr;
-  ;
-  ;// 6.5.3.3 Field-designators
-  ;field_designator
-  ;	:	record_var '.' field_specifier
-  ;	|	field_designator_id;
-  ;	
-  ;record_var
-  ;	:	var_access;
-  ;	
-  ;field_specifier
-  ;	:	field_id;
-  ;	
-  ;// 6.5.5 Buffer-variables
-  ;buffer_var
-  ;	:	file_var '^';
-  ;	
-  ;file_var:	var_access;
-  ;
-  ;// 6.1.4 Directives
-  ;directive 
-  ;	:	ID;
-  ;
-  ;// 6.6.1 Procedure-declarations
-  ;proc_declaration
-  ;	:	proc_heading ';' directive
-  ;	|	proc_identification ';' proc_block
-  ;	|	proc_heading ';' proc_block;
-  ;	
-  ;proc_heading
-  ;	:	PROCEDURE ID (formal_parameter_list)*;
-  ;	
-  ;proc_identification
-  ;	:	PROCEDURE proc_id;
-  ;	
-  ;proc_id
-  ;	:	ID;
-  ;	
-  ;proc_block
-  ;	:	block;
-  ;
-  ;// 6.6.2 Function-declarations
-  ;func_declaration
-  ;	:	func_heading ';' directive
-  ;	|	func_identification ';' func_block
-  ;	|	func_heading ';' func_block;
-  ;
-  ;func_heading
-  ;	:	FUNCTION ID (formal_parameter_list)* ':' result_type;
-  ;	
-  ;func_identification
-  ;	:	FUNCTION func_id;
-  ;	
-  ;func_id	:	ID;
-  ;
-  ;result_type
-  ;	:	simple_type_id | pointer_type_id;
-  ;	
-  ;func_block
-  ;	:	block;
-  ;	
-  ;// 6.6.3.1 General parameters
-  ;formal_parameter_list
-  ;	:	'(' formal_parameter_section (';' formal_parameter_section)* ')';
-  ;	
-  ;formal_parameter_section
-  ;	:	value_parameter_spec
-  ;	|	var_parameter_spec
-  ;	|	proc_parameter_spec
-  ;	|	func_parameter_spec
-  ;	|	conformant_array_parameter_spec;
-  ;	
-  ;value_parameter_spec
-  ;	:	id_list ':' type_id;
-  ;	
-  ;var_parameter_spec
-  ;	:	VAR id_list ':' type_id;
-  ;	
-  ;proc_parameter_spec
-  ;	:	proc_heading;
-  ;	
-  ;func_parameter_spec
-  ;	:	func_heading;
-  ;
-  ;// 6.6.3.7.1 General conformant array parameters
-  ;conformant_array_parameter_spec
-  ;	:	value_conf_array_spec
-  ;	|	var_conf_array_spec;
-  ;	
-  ;value_conf_array_spec
-  ;	:	id_list ':' conf_array_schema;
-  ;	
-  ;var_conf_array_spec
-  ;	:	VAR id_list ':' conf_array_schema;
-  ;	
-  ;conf_array_schema
-  ;	:	packed_conf_array_schema
-  ;	|	unpacked_conf_array_schema;
-  ;	
-  ;packed_conf_array_schema
-  ;	:	PACKED ARRAY '[' index_type_spec ']' OF type_id;
-  ;	
-  ;unpacked_conf_array_schema
-  ;	:	ARRAY '[' index_type_spec (';' index_type_spec)* ']' OF (type_id | conf_array_schema);
-  ;	
-  ;index_type_spec
-  ;	:	ID '..' ID ':' ord_type_id;
-  ;	
-  ;factor	:	bound_id
-  ;	|	var_access
-  ;	|	unsigned_const
-  ;	|	func_designator
-  ;	|	set_constructor
-  ;	|	'(' expr ')'
-  ;	|	NOT factor;
-  ;
-  ;// 6.7.1 General expressions
-  ;expr	:	simple_expr (relop simple_expr)?;
-  ;
-  ;simple_expr
-  ;	:	(SIGN)? term (addop term)*;
-  ;	
-  ;term	:	factor (multop factor)*;
-  ;
-  ;unsigned_const
-  ;	:	unsigned_number
-  ;	|	STRING
-  ;	|	const_id
-  ;	|	NIL;
-  ;	
-  ;set_constructor
-  ;	:	'[' (member_designator (',' member_designator)*)? ']';
-  ;	
-  ;member_designator
-  ;	:	expr ('..' expr)?;
-  ;
-  ;// 6.7.2.1 General operators
-  ;multop	:	'*' | '/' | DIV | MOD | AND;
-  ;
-  ;addop	:	'+' | '-' | OR;
-  ;
-  ;relop	:	'=' | '<>' | '<' | '>' | '<=' | '>=' | IN;
-  ;
-  ;// 6.7.2.3 Boolean operators
-  ;bool_expr 
-  ;	:	expr;
-  ;	
-  ;// 6.7.3 Function-designators
-  ;func_designator
-  ;	:	func_id (actual_param_list)?;
-  ;	
-  ;actual_param_list
-  ;	:	'(' actual_param (',' actual_param)* ')';
-  ;
-  ;actual_param
-  ;	:	expr
-  ;	|	var_access
-  ;	|	proc_id
-  ;	|	func_id;
-  ;	
-  ;// 6.8.2.1 General simple-statements
-  ;simple_statement
-  ;	:	empty_statement
-  ;	|	assign_statement
-  ;	|	proc_statement
-  ;	| 	goto_statement;
-  ;	
-  ;empty_statement
-  ;	:	;
-  ;	
-  ;// 6.8.2.2 Assignment-statements
-  ;assign_statement
-  ;	:	(var_access | func_id) ':=' expr;
-  ;	
-  ;// 6.8.2.3 Procedure-statements
-  ;proc_statement
-  ;	:	proc_id ( (actual_param_list)? 
-  ;			| read_param_list
-  ;			| readln_param_list
-  ;			| write_param_list
-  ;			| writeln_param_list );
-  ;			
-  ;// 6.8.2.4 Goto-statements
-  ;goto_statement
-  ;	:	GOTO LABELT;
-  ;	
-  ;// 6.8.3.1 General structured-statements
-  ;struct_statement
-  ;	:	compound_statement
-  ;	|	cond_statement
-  ;	| 	repetitive_statement
-  ;	|	with_statement;
-  ;	
-  ;statement_sequence
-  ;	:	statement (';' statement)*;
-  ;	
-  ;// 6.8.3.2 Compound-statements
-  ;compound_statement
-  ;	:	BEGIN statement_sequence END;
-  ;	
-  ;// 6.8.3.3 Conditional-statements
-  ;cond_statement
-  ;	:	if_statement 
-  ;	| 	case_statement;
-  ;	
-  ;// 6.8.3.4 If-statements
-  ;if_statement
-  ;	:	IF bool_expr THEN statement (else_part)?;
-  ;
-  ;else_part
-  ;	:	ELSE statement;
-  ;	
-  ;// 6.8.3.5 Case-statements
-  ;case_statement
-  ;	:	CASE case_index OF case_list_element (';' case_list_element)* (';')? END;
-  ;
-  ;case_list_element
-  ;	:	case_const_list ':' statement;
-  ;	
-  ;case_index
-  ;	:	expr;
-  ;	
-  ;// 6.8.3.6 Repetitive-statements
-  ;repetitive_statement
-  ;	:	repeat_statement
-  ;	|	while_statement
-  ;	|	for_statement;
-  ;	
-  ;// 6.8.3.7
-  ;repeat_statement
-  ;	:	REPEAT statement_sequence UNTIL bool_expr;
-  ;
-  ;// 6.8.3.8 While-statements
-  ;while_statement
-  ;	:	WHILE bool_expr DO statement;
-  ;	
-  ;// 6.8.3.9 For-statements
-  ;for_statement
-  ;	:	FOR control_var ':=' init_value ( TO | DOWNTO ) final_value DO statement;
-  ;	
-  ;control_var
-  ;	:	entire_var;
-  ;	
-  ;init_value
-  ;	:	expr;
-  ;
-  ;final_value
-  ;	:	expr;
-  ;	
-  ;// 6.8.3.10 With-statements
-  ;with_statement
-  ;	:	WITH record_var_list DO statement;
-  ;	
-  ;record_var_list
-  ;	:	record_var (',' record_var)*;
-  ;	
-  ;field_designator_id
-  ;	:	ID;
-  ;	
-  ;// 6.9.1 The procedure read
-  ;read_param_list
-  ;	:	'(' (file_var ',')? var_access (',' var_access)* ')';
-  ;
-  ;// 6.9.2 The procedure readln
-  ;readln_param_list
-  ;	:	( '(' ( file_var | var_access ) (',' var_access)* )?;
-  ;	
-  ;// 6.9.3 The procedure write
-  ;write_param_list
-  ;	:	'(' (file_var ',')? write_param (',' write_param)* ')';
-  ;	
-  ;write_param
-  ;	:	expr (':' expr (':' expr)?)?;
-  ;	
-  ;// 6.9.4 The procedure writeln
-  ;writeln_param_list
-  ;	:	( '(' (file_var | write_param) (',' write_param)* ')' )?;
-  ;	
-  ;// 6.10 Programs
-  ;program	:	program_heading ';' program_block '.';
-  ;
-  ;program_heading
-  ;	:	PROGRAM ID ('(' program_param_list ')')?;	
-  ;	
-  ;program_param_list
-  ;	:	id_list;
-  ;	
-  ;program_block
-  ;	:	block;
-  ;
-  ;// TODO: Strings, comments; empty statement?!
-  ;
-  ;bound_id:	ID;
-  ;
-  ;statement
-  ;	:	( LABELT ':' )? ( simple_statement | struct_statement );
-  ;
-  ;// 6.1.3 Identifiers
-  ;ID	:	LETTER (LETTER | '0'..'9')*;
-  ;
-  ;// 6.1.5 Numbers
-  ;signed_number
-  ;	:	SIGNED_INTEGER | SIGNED_REAL;
-  ;SIGNED_REAL
-  ;	:	(SIGN)? UNSIGNED_REAL;
-  ;SIGNED_INTEGER
-  ;	:	(SIGN)? UNSIGNED_INTEGER;
-  ;unsigned_number
-  ;	:	UNSIGNED_INTEGER | UNSIGNED_REAL;
-  ;SIGN	:	'+' | '-';
-  ;UNSIGNED_REAL
-  ;	:	DIGITSEQ '.' FRAC_PART (E SCALE_FACTOR)
-  ;	|	DIGITSEQ E SCALE_FACTOR;
-  ;UNSIGNED_INTEGER
-  ;	:	DIGITSEQ;
-  ;FRAC_PART
-  ;	:	DIGITSEQ;
-  ;SCALE_FACTOR
-  ;	:	(SIGN)? DIGITSEQ;
-  ;DIGITSEQ:	('0'..'9')+;
-  ;
-  ;// 6.1.6 Labels
-  ;LABELT	:	DIGITSEQ;
-  ;
-  ;// 6.1.7 Character-strings
-  ;STRING	:	'\'' (STRING_ELEMENT)+ '\'';
-  ;STRING_ELEMENT
-  ;	:	APOSTROPHE_IMAGE | STRING_CHAR;
-  ;APOSTROPHE_IMAGE
-  ;	:	'\'\'';
-  ;STRING_CHAR
-  ;	:	'a';
-  ;
-  ;
-  ;// Symbols may be needed for the lexer output. May not.
-  ;// 6.1.2 Special-symbols
-  ;SPSYMBOL:	  '+' | '-' | '*' | '/' | '=' | '<' | '>' | '[' | ']'
-  ;		| '.' | ',' | ':' | ';' | '^' | '(' | ')'
-  ;		| '<>'| '<='| '>='| ':='| '..'| WORDSYMBOL;
-  ;
-  ;WORDSYMBOL
-  ;	:	AND | ARRAY | BEGIN | CASE | CONST | DO | DOWNTO | ELSE | END | FILE
-  ;	|	FOR | FUNCTION | GOTO | IF | IN | LABEL | MOD | NIL | NOT | OF | OR
-  ;	|	PACKED | PROCEDURE | PROGRAM | RECORD | REPEAT | SET | THEN | TO
-  ;	|	TYPE | UNTIL | VAR | WHILE | WITH | DIV;
-  ;
-  ;// ANTLR doesn't support case-insensitive languages.
-  ;DIV 	: 	D I V;
-  ;AND	:	A N D;
-  ;ARRAY	:	A R R A Y;
-  ;BEGIN	:	B E G I N;
-  ;CASE	:	C A S E;
-  ;CONST	:	C O N S T;
-  ;DO	:	D O;
-  ;DOWNTO	:	D O W N T O;
-  ;ELSE	:	E L S E;
-  ;END	:	E N D;
-  ;FILE	:	F I L E;
-  ;FOR	:	F O R;
-  ;FUNCTION:	F U N C T I O N;
-  ;GOTO	:	G O T O;
-  ;IF	:	I F;
-  ;IN	:	I N;
-  ;LABEL	:	L A B E L;
-  ;MOD	:	M O D;
-  ;NIL	:	N I L;
-  ;NOT	:	N O T;
-  ;OF	:	O F;
-  ;OR	:	O R;
-  ;PACKED	:	P A C K E D;
-  ;PROCEDURE :	P R O C E D U R E;
-  ;PROGRAM	:	P R O G R A M;
-  ;RECORD	:	R E C O R D;
-  ;REPEAT	:	R E P E A T;
-  ;SET	:	S E T;
-  ;THEN	:	T H E N;
-  ;TO	:	T O;
-  ;TYPE	:	T Y P E;
-  ;UNTIL	:	U N T I L;
-  ;VAR	:	V A R;
-  ;WHILE	:	W H I L E;
-  ;WITH	:	W I T H;		
-  ;
-  ;// Fragments a.k.a. named regexes
-  ;fragment LETTER
-  ;	:	(A|B|C|D|E|F|G|H|I|J|K|L|M|N|O|P|Q|R|S|T|U|V|W|X|Y|Z);
-  ;
-  ;fragment A:('a'|'A');
-  ;fragment B:('b'|'B');
-  ;fragment C:('c'|'C');
-  ;fragment D:('d'|'D');
-  ;fragment E:('e'|'E');
-  ;fragment F:('f'|'F');
-  ;fragment G:('g'|'G');
-  ;fragment H:('h'|'H');
-  ;fragment I:('i'|'I');
-  ;fragment J:('j'|'J');
-  ;fragment K:('k'|'K');
-  ;fragment L:('l'|'L');
-  ;fragment M:('m'|'M');
-  ;fragment N:('n'|'N');
-  ;fragment O:('o'|'O');
-  ;fragment P:('p'|'P');
-  ;fragment Q:('q'|'Q');
-  ;fragment R:('r'|'R');
-  ;fragment S:('s'|'S');
-  ;fragment T:('t'|'T');
-  ;fragment U:('u'|'U');
-  ;fragment V:('v'|'V');
-  ;fragment W:('w'|'W');
-  ;fragment X:('x'|'X');
-  ;fragment Y:('y'|'Y');
-  ;fragment Z:('z'|'Z');
   
-  (provide spc-lexer data delim keywords INT FLOAT STRING ID LP RP LB RB ASSIGN EQ GT LT GEQ LEQ CARET DOT DDOT AST PLUS MINUS SLASH COMMA COLON SEMICOLON NOTEQ AND ARRAY BEGIN CASE CONST DIV DO DOWNTO ELSE END FILE FOR FUNCTION GOTO IF IN LABEL MOD NIL NOT OF OR PACKED PROCEDURE PROGRAM RECORD REPEAT SET THEN TO TYPE UNTIL VAR WHILE WITH tk-lexeme tk-val))
+  (define (spc-parser source)
+    (parser
+     (src-pos)
+     
+     (start program)
+     (end EOF)
+     
+     (error (λ (tok-ok? tok-name tok-value start-pos end-pos)
+              (printf "Error at (~s, ~s): Unexpected ~s ~s ~n" (position-line start-pos) (position-col start-pos) tok-name (tk-val tok-value))))
+     
+     (tokens keywords delim data eoftk)
+     
+     (suppress)
+     
+     (grammar
+      
+      (program ((program-heading SC block DOT) (list 'program $1 $3)))
+      (program-heading ((PROGRAM ID) $2)
+                       ((PROGRAM ID LP id-list RP) (list $2 $4)))
+      
+      
+      ;; Block
+      (block ((label-decls const-defs type-defs var-decls proc-func-decls compound-statement) (list 'block $1 $2 $3 $4 $5 $6)))
+      
+      ;; Labels section
+      (label-decls (() null)
+                   ((LABEL label-list SC) (list 'lables $2)))
+      (label-list ((INT) (list $1))
+                  ((INT COMMA label-list) (cons $1 $3)))
+      
+      ;; Constants section
+      (const-defs (() null)
+                  ((CONST const-def-list) (list 'consts $2)))
+      (const-def-list ((const-def) (list $1))
+                      ((const-def const-def-list) (cons $1 $2)))
+      (const-def ((ID EQ constant SC) (list $1 $3)))
+      (constant ((STRING) $1)
+                ((ID) $1)
+                ((signed-number) $1)
+                ((sign ID) (list $1 $2)))
+      
+      ;; Types section
+      (type-defs (() null)
+                 ((TYPE type-def-list) (list 'types $2)))
+      (type-def-list ((type-def) (list $1))
+                     ((type-def type-def-list) (cons $1 $2)))
+      (type-def ((ID EQ type-denoter SC) (list $1 $3)))
+      (type-denoter ((ID) $1)
+                    ((new-type) $1))
+      (new-type ((new-ord-type) $1)
+                ((new-struct-type) $1)
+                ((new-pointer-type) $1))
+      (new-ord-type ((enum-type) $1)
+                    ((subrange-type) $1))
+      ; Enum type
+      (enum-type ((LP id-list RP) $2))
+      ; Subrange type
+      (subrange-type ((constant DDOT constant) (list $1 $3)))
+      (new-struct-type ((unpacked-struct-type) $1)
+                       ((PACKED unpacked-struct-type) $2))
+      (unpacked-struct-type ((array-type) $1)
+                            ((record-type) $1)
+                            ((set-type) $1)
+                            ((file-type) $1))
+      ; Array type
+      (array-type ((ARRAY LB ord-type-list RB OF type-denoter) (list 'array $3 $6)))
+      (ord-type-list ((ord-type) (list $1))
+                     ((ord-type COMMA ord-type-list) (cons $1 $3)))
+      (ord-type ((new-ord-type) $1)
+                ((ID) $1))
+      ; Record type
+      (record-type ((RECORD field-list END) (list 'record $2)))
+      (field-list (() null)
+                  ((variant-part) $1)
+                  ((variant-part SC) $1)
+                  ((fixed-part) $1)
+                  ((fixed-part SC) $1)
+                  ((fixed-part SC variant-part) (list $1 $3))
+                  ((fixed-part SC variant-part SC) (list $1 $3)))
+      (fixed-part ((record-section) (list $1))
+                  ((record-section SC fixed-part) (cons $1 $3)))
+      (record-section ((id-list COLON type-denoter) (list $1 $3)))
+      (variant-part ((CASE variant-selector OF variant-list) (list $2 $4)))
+      (variant-list ((variant) (list $1))
+                    ((variant SC variant-list) (cons $1 $3)))
+      (variant ((const-list COLON LP field-list RP) (list $1 $4)))
+      (const-list ((constant) (list $1))
+                  ((constant COMMA const-list) (cons $1 $3)))
+      (variant-selector ((ID) $1)
+                        ((ID COLON ID) (list $1 $3)))
+      ; Set type
+      (set-type ((SET OF ord-type) $3))
+      ; File type
+      (file-type ((FILE OF type-denoter) $3))
+      ; Pointer type
+      (pointer-type ((ID) $1)
+                    ((new-pointer-type) $1))
+      (new-pointer-type ((CARET ID) (list '^ $2)))
+      
+      ;; Var section
+      (var-decls (() null)
+                 ((VAR var-decl-list) (list 'var $2)))
+      (var-decl-list ((var-decl) (list $1))
+                     ((var-decl var-decl-list) (cons $1 $2)))
+      (var-decl ((id-list COLON type-denoter SC) (list $1 $3)))
+      (var-access ((ID) $1)
+                  ((ID var-access-rest-list) (list $1 $2)))
+      (var-access-rest-list ((var-access-rest) (list $1))
+                            ((var-access-rest var-access-rest-list) (cons $1 $2)))
+      (var-access-rest ((LB expr-list RB) $2)
+                       ((DOT ID) $2)
+                       ((CARET) 'caret))
+      
+      ;; Procedures and Functions declarations
+      (proc-func-decls (() null)
+                       ((proc-decl proc-func-decls) (cons $1 $2))
+                       ((func-decl proc-func-decls) (cons $1 $2)))
+      (proc-decl ((proc-heading SC ID SC) (list 'proc $1 $3))
+                 ((proc-heading SC block SC) (list 'proc $1 $3)))
+      (proc-heading ((PROCEDURE ID formal-parameter-list) (list $2 $3)))
+      (formal-parameter-list (() null)
+                             ((LP formal-parameter-section-list RP) $2))
+      (formal-parameter-section-list ((formal-parameter-section) (list $1))
+                                     ((formal-parameter-section SC formal-parameter-section-list) (cons $1 $3)))
+      (formal-parameter-section ((value-parameter-spec) $1)
+                                ((var-parameter-spec) $1)
+                                ((proc-heading) $1)
+                                ((func-heading) $1)
+                                ((conformant-array-parameter-spec) $1))
+      (value-parameter-spec ((id-list COLON ID) (list $1 $3)))
+      (var-parameter-spec ((VAR id-list COLON ID) (list $2 $4)))
+      (conformant-array-parameter-spec ((value-conf-array-spec) $1)
+                                       ((var-conf-array-spec) $1))
+      (value-conf-array-spec ((id-list COLON conf-array-schema) (list $1 $3)))
+      (var-conf-array-spec ((VAR id-list COLON conf-array-schema) (list $2 $4)))
+      (conf-array-schema ((packed-conf-array-schema) $1)
+                         ((unpacked-conf-array-schema) $1))
+      (packed-conf-array-schema ((PACKED ARRAY LB index-type-spec RB OF ID) (list $4 $7)))
+      (unpacked-conf-array-schema 
+       ((ARRAY LB index-type-spec-list RB OF unpacked-conf-array-schema-specifier)
+        (list $3 $6)))
+      (unpacked-conf-array-schema-specifier ((ID) $1)
+                                            ((conf-array-schema) $1))
+      (index-type-spec-list ((index-type-spec) (list $1))
+                            ((index-type-spec SC index-type-spec-list) (cons $1 $3)))
+      (index-type-spec ((ID DDOT ID COLON ID) (list $1 $3 $5)))
+      (func-decl ((func-heading SC ID) (list 'func $1 $3))
+                 ((func-heading SC block) (list 'func $1 $3))
+                 ((func-id SC block) (list 'func $1 $3)))
+      (func-heading ((FUNCTION ID formal-parameter-list COLON ID) (list $2 $3 $5)))
+      (func-id ((FUNCTION ID) $2))
+      
+      ;; Expressions
+      (expr-list ((expr) (list $1))
+                 ((expr COMMA expr-list) (cons $1 $3)))
+      (factor ((ID var-access-rest) (list $1 $2))
+              ((ID LP expr-list RP) (list $1 $3))
+              ((unsigned-const) $1)
+              ((set-constructor) $1)
+              ((LP expr RP) $2)
+              ((NOT factor) (list 'not $2)))
+      (expr ((simple-expr) $1)
+            ((simple-expr relop simple-expr) (list $2 $1 $3)))
+      (simple-expr ((term-list) $1)
+                   ((sign term-list) (list $1 $2)))
+      (term-list ((term) $1)
+                 ((term addop term-list) (list $2 $1 $3)))
+      (term ((factor) $1)
+            ((factor multop term) (list $2 $1 $3)))
+      (unsigned-const ((number) $1)
+                      ((STRING) $1)
+                      ((ID) $1)
+                      ((NIL) $1))
+      (set-constructor ((LB member-designator-list RB) $2)
+                       ((LB RB) null))
+      (member-designator-list ((member-designator) (list $1))
+                              ((member-designator COMMA member-designator-list) (cons $1 $3)))
+      (member-designator ((expr) $1)
+                         ((expr DDOT expr) (list $1 $3)))
+      (multop ((AST) '*)
+              ((SLASH) '/)
+              ((DIV) 'div)
+              ((MOD) 'mod)
+              ((AND) 'and))
+      (addop ((PLUS) '+)
+             ((MINUS) '-)
+             ((OR) 'or))
+      (relop ((EQ) '=)
+             ((NOTEQ) '<>)
+             ((LT) '<)
+             ((GT) '>)
+             ((LEQ) '<=)
+             ((GEQ) '>=)
+             ((IN) 'in))
+      
+      ;; Statements
+      (simple-statement (() 'empty)
+                        ((assign-statement) (list 'assign $1))
+                        ((proc-statement) (list 'proc $1))
+                        ((goto-statement) (list 'goto $1)))
+      
+      (assign-statement ((var-access ASSIGN expr) (list ':= $1 $2)))
+      (goto-statement ((GOTO INT) (list 'goto $2)))
+      (proc-statement-arg ((expr) (list 'pr-a $1))
+                          ((expr COLON expr) (list $1 $2))
+                          ((expr COLON expr COLON expr) (list $1 $2 $3)))
+      (proc-statement-arg-list 
+       ((proc-statement-arg) (list $1))
+       ((proc-statement-arg COMMA proc-statement-arg-list) (cons $1 $3)))
+      (proc-statement ((ID) $1)
+                      ((ID LP proc-statement-arg-list RP) (list $1 $3)))
+      (struct-statement ((compound-statement) $1)
+                        ((cond-statement) $1)
+                        ((repetitive-statement) $1)
+                        ((with-statement) $1))
+      (statement-sequence ((statement) (list $1))
+                          ((statement SC statement-sequence) (cons $1 $3)))
+      (compound-statement ((BEGIN statement-sequence END) (list 'comp-stmt $2)))
+      (cond-statement ((if-statement) $1)
+                      ((case-statement) $1))
+      (if-statement ((IF expr THEN statement) (list $2 $4))
+                    ((IF expr THEN statement ELSE statement) (list $2 $4 $6)))
+      (case-statement ((CASE expr OF case-list-element-list END) (list $2 $4))
+                      ((CASE expr OF case-list-element-list SC END) (list $2 $4)))
+      (case-list-element-list 
+       ((case-list-element) (list $1))
+       ((case-list-element SC case-list-element-list) (cons $1 $3)))
+      (case-list-element ((const-list COLON statement) (list $1 $3)))
+      (repetitive-statement ((repeat-statement) $1)
+                            ((while-statement) $1)
+                            ((for-statement) $1))
+      (repeat-statement ((REPEAT statement-sequence UNTIL expr) (list 'repeat $2 $4)))
+      (while-statement ((WHILE expr DO statement) (list 'while $2 $4)))
+      (for-statement ((FOR ID ASSIGN expr to-downto expr DO statement) (list 'for $1 $3 $4 $5 $7)))
+      (to-downto ((TO) 'to)
+                 ((DOWNTO) 'downto))
+      (with-statement ((WITH record-var-list DO statement) (list 'with $2 $4)))
+      (record-var-list ((var-access) (list $1))
+                       ((var-access COMMA record-var-list) (cons $1 $3)))
+      (statement ((labeled simple-statement) (list 'simple $1 $2))
+                 ((labeled struct-statement) (list 'struct $1 $2)))
+      (labeled (() -1)
+               ((INT COLON) (tk-val $1)))
+      
+      ;; Miscellanea
+      (id-list ((ID) (list $1))
+               ((ID COMMA id-list) (cons $1 $3)))
+      (number ((INT) $1)
+              ((FLOAT) $1))
+      (signed-number ((number) $1)
+                     ((sign number) (make-tk (tk-lexeme $2) ($1 (tk-val $2)))))
+      (sign ((PLUS) +)
+            ((MINUS) -)))))
+     
+ ; (provide spc-lexer data delim keywords eoftk INT FLOAT STRING ID LP RP LB RB ASSIGN EQ GT LT GEQ LEQ CARET DOT DDOT AST PLUS MINUS SLASH COMMA COLON SC NOTEQ AND ARRAY BEGIN CASE CONST DIV DO DOWNTO ELSE END FILE FOR FUNCTION GOTO IF IN LABEL MOD NIL NOT OF OR PACKED PROCEDURE PROGRAM RECORD REPEAT SET THEN TO TYPE UNTIL VAR WHILE WITH EOF tk-lexeme tk-val)
