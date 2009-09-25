@@ -1,6 +1,7 @@
 (module spc-parser scheme
   (require parser-tools/yacc
-           "spc-lex.ss")
+           "spc-lex.ss"
+           "spc-structures.ss")
   
   (define (spc-parser source)
     (parser
@@ -19,7 +20,7 @@
      
      (grammar
       
-      (program ((program-heading SC block DOT) (list 'program $1 $3)))
+      (program ((program-heading SC block DOT) $3))
       (program-heading ((PROGRAM ID) (tk-val $2))
                        ((PROGRAM ID LP id-list RP) (list (tk-val $2) $4)))
       
@@ -31,24 +32,24 @@
                var-decls 
                proc-func-decls 
                compound-statement) 
-              (list 'block $1 $2 $3 $4 $5 $6)))
+              (make-block $1 $2 $3 $4 $5 $6)))
       
       ;; Labels section
       (label-decls (() null)
-                   ((LABEL label-list SC) (list 'labels $2)))
-      (label-list ((INT) (list (tk-val $1)))
-                  ((INT COMMA label-list) (cons (tk-val $1) $3)))
+                   ((LABEL label-list SC) $2))
+      (label-list ((INT) (list $1))
+                  ((INT COMMA label-list) (cons $1 $3)))
       
       ;; Constants section
       (const-defs (() null)
-                  ((CONST const-def-list) (list 'consts $2)))
+                  ((CONST const-def-list) $2))
       (const-def-list ((const-def) (list $1))
                       ((const-def const-def-list) (cons $1 $2)))
-      (const-def ((ID EQ constant SC) (list (tk-val $1) $3)))
-      (constant ((STRING) (tk-val $1))
-                ((ID) (tk-val $1))
+      (const-def ((ID EQ constant SC) (make-constant $1 $3)))
+      (constant ((STRING) $1)
+                ((ID) $1)
                 ((signed-number) $1)
-                ((sign ID) (list $1 (tk-val $2))))
+                ((sign ID) (list $1 $2)))
       
       ;; Types section
       (type-defs (() null)

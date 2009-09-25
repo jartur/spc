@@ -21,7 +21,10 @@
   
   (define-tokens eoftk (EOF))
   
-  (define-struct tk (lexeme val))
+  (define-struct tk (lexeme val) 
+    #:property prop:custom-write 
+    (λ (token port write?)
+      ((if write? write display) (tk-val token) port)))
 
   (define spc-lexer
     (lexer-src-pos-kw
@@ -35,8 +38,8 @@
      (((:: #\: #\=) ASSIGN) ((:: #\> #\=) GEQ) 
       ((:: #\< #\=) LEQ) ((:: #\. #\.) DDOT) ((:: #\< #\>) NOTEQ) 
       (#\= EQ) (#\; SC) (#\: COLON) (#\, COMMA) (#\/ SLASH) (#\- MINUS) 
-      (#\+ PLUS) (#\* AST) (#\. DOT) (#\^ CARET) (#\< LT) (#\( LP) (#\) RP) 
-      (#\[ LB) (#\] RB) (#\> GT))
+      (#\+ PLUS) (#\* AST) (#\. DOT) ((:or #\^ #\@) CARET) (#\< LT) (#\( LP) (#\) RP) 
+      ((:or #\[ (:: #\( #\.)) LB) ((:or #\] (:: #\. #\))) RB) (#\> GT))
      
      ;; Comments
      ((:or whitesp comment) (return-without-pos (spc-lexer input-port)))
