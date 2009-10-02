@@ -12,6 +12,7 @@
   
   (define-struct type-def (id type) #:transparent)
   (define-struct enum-type (elems) #:transparent)
-  (define-struct range-type (start end) #:transparent)  
+  (define-struct range-type (start end) #:transparent)
+  (define-struct array-type (range type (packed? #f)) #:transparent)
   
   )

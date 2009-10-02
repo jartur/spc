@@ -66,7 +66,7 @@
                     ((subrange-type) $1))
       ; Enum type
       (enum-type ((LP id-list RP) (make-enum-type $2)))
-      ; Subrange type
+      ; Subrange type 
       (subrange-type ((constant DDOT constant) (make-range-type $1 $3)))
       (new-struct-type ((unpacked-struct-type) $1)
                        ((PACKED unpacked-struct-type) (list 'packed $2)))
