@@ -13,6 +13,13 @@
   (define-struct type-def (id type) #:transparent)
   (define-struct enum-type (elems) #:transparent)
   (define-struct range-type (start end) #:transparent)
-  (define-struct array-type (range type (packed? #f)) #:transparent)
+  
+  (define-struct packable-type ((packed? #:auto #:mutable)) #:transparent)
+  (define-struct (array-type packable-type) (range type) #:transparent)
+  (define-struct (record-type packable-type) (fixed variant) #:transparent)
+  (define-struct record-section (ids type) #:transparent)
+  (define-struct variant-part (selector variants) #:transparent)
+  (define-struct variant-selector (id type) #:transparent)
+  
   
   )
