@@ -1,27 +1,26 @@
-#lang scheme
-(require "spc-lex.ss" 
-         "spc-parser.ss" 
-         scheme/match 
-         "spc-structures.ss")
-;(run-lexer (open-input-file "test.pas"))
+(module hovedlinje 
+        scheme
+  (require "spc-lex.ss" 
+           "spc-parser.ss" 
+           scheme/match 
+           "spc-structures.ss")
 
-;(let ([ast (run-parser (open-input-file "test.pas"))])
- ; (check-block ast))
+  (define lex-out (make-parameter #f))
+  (define ast-out (make-parameter #f))
 
-(run-parser (open-input-file "test.pas"))
-
-;(define (check-block block o-labels o-consts o-types o-vars o-fns)
-;  (match block
-;    [(list labels consts types vars fns cs) 
-;     (check-consts consts o-consts)]))
-
-;(define (check-consts consts o-consts)
-;  (define (check-const-list cl)
-;    
-;  (match consts 
-;    [(list 'consts const-list)
-;     (check-const-list const-list)]
-;    [_ #t])))
-    
+  (define input-file
+    (command-line
+      #:once-each
+      (("-l" "--lexer") "Output lexing results"
+                        (lex-out #t))
+      (("-a" "--ast") "Output AST"
+                      (ast-out #t))
+      #:args (filename)
+      filename))
   
-  
+  (when (lex-out)
+    (pretty-print (run-lexer (open-input-file input-file))))
+
+  (when (ast-out)
+    (pretty-print (run-parser (open-input-file input-file)))))
+ 
