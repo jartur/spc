@@ -47,4 +47,18 @@
    (unpacked-array-schema (index-type-specs specifier))
    (index-type-spec (start end s))
    (func-decl (heading body))
-   (func-heading (id params type))))
+   (func-heading (id params type))
+   
+   (unary-op (op expr))
+   (binary-op (op lexpr rexpr))
+   (factor-access (id accessor))
+   (factor-call (id exprs))
+   (set-constructor (members))
+   (member-designator (lexpr rexpr))
+   
+   (assignment (var expr))
+   (goto (label))
+   
+   (proc-arg (expr opt1 opt2))
+   (proc-statement (id args))
+   )
