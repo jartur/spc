@@ -8,8 +8,9 @@
   
   (define-syntax (ast-structures s)
     (syntax-case s ()
-      ((_ (name fields)...)
-       (syntax (begin (define-struct name fields #:transparent) ...)))))
+      ((_ (name (field ...))...)
+       (syntax (begin (define-struct name (field ...) 
+                        #:transparent) ...)))))
   
   (ast-structures
    (block (labels constants types vars procs css))
@@ -61,4 +62,15 @@
    
    (proc-arg (expr opt1 opt2))
    (proc-statement (id args))
-   )
+   
+   (if-statement (test then else))
+   (case-statement (expr cases))
+   (case-element (consts statement))
+   
+   (repeat-statement (statements test))
+   (while-statement (test statement))
+   (for-statement (id start direction end statement))
+   (with-statement (vars statement))
+   
+   (labeled-statement (label statement))
+   ))
