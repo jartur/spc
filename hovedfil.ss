@@ -1,4 +1,4 @@
-(module hovedlinje 
+(module hovedfil
         scheme
   (require "spc-lex.ss" 
            "spc-parser.ss" 
