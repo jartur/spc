@@ -6,6 +6,9 @@
     (λ (pt p w?)
       ((if w? write display) (pos-token-val pt) p)))
   
+  (define (pos-token->position-string pt)
+    (string-append (number->string (pos-token-line pt)) ", " (number->string (pos-token-col pt))))
+  
   (define-syntax (ast-structures s)
     (syntax-case s ()
       ((_ (name (field ...))...)
