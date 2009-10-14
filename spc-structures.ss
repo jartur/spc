@@ -75,5 +75,4 @@
    (for-statement (id start direction end statement))
    (with-statement (vars statement))
    
-   (labeled-statement (label statement))
-   ))
+   (labeled-statement (label statement))))
