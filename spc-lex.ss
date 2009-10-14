@@ -48,7 +48,7 @@
      ((eof) (make-kw-tk token-EOF "EOF"))
          
      ;; Id
-     ((:: letter (:* (:or letter digit))) (token-ID (make-tk lexeme (string->symbol lexeme))))
+     ((:: letter (:* (:or letter digit))) (token-ID (make-tk lexeme (string->symbol (string-downcase lexeme)))))
      
      ;; Numbers & strings
      ((:: int (:or (:: #\. digitseq (:? exp)) exp)) 
