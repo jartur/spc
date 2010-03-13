@@ -1,1 +1,3 @@
 This is my simple compiler for Pascal. Not of practical value. Not of any good coding. Actually it's just for a university assignment and I tend to do it straightforwardly, that is without much of rewriting or thinking about good design. Though I try to keep it really simple so that it could be of some help for those who need to see some actual examples of compilers without digging too deep.
+
+ABANDONED. I will not continue this project and leave it here as an artifact of my early Scheme programming. Things started to get ugly in semantic-pass.ss I mean really ugly. 
